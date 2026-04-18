@@ -16,7 +16,7 @@ import Positions from "./pages/admin/Positions";
 import PaymentManagement from "./pages/admin/payment";
 import Reports from "./pages/admin/Reports";
 import Integration from "./pages/admin/Integration";
-import Game from "./pages/admin/Game";
+import Game from "./pages/admin/game";
 const isAuthenticated = () => {
   return localStorage.getItem("user");
 };
