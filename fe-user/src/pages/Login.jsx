@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../services/authService";
 import {
@@ -22,6 +22,21 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
+  useEffect(() => {
+    const savedRememberMe = localStorage.getItem("rememberMe");
+    const savedUser = localStorage.getItem("savedUsername");
+
+    if (savedRememberMe === "true") {
+      setRememberMe(true);
+      if (savedUser) {
+        setForm((prev) => ({
+          ...prev,
+          username: savedUser,
+        }));
+      }
+    }
+  }, []);
+
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     if (error) setError("");
@@ -39,23 +54,38 @@ function Login() {
     setLoading(true);
 
     try {
-      const data = await login(form);
+      const response = await login(form);
 
-      // Lưu thông tin đăng nhập
-      localStorage.setItem("user", JSON.stringify(data.user));
+      // Hỗ trợ cả 2 kiểu:
+      // 1) login() trả thẳng data
+      // 2) login() trả response có .data
+      const data = response?.data || response;
+
+      console.log("LOGIN RESPONSE:", data);
+
+      if (!data?.token || !data?.user) {
+        throw new Error("Dữ liệu đăng nhập trả về không hợp lệ");
+      }
+
       localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
 
       if (rememberMe) {
         localStorage.setItem("rememberMe", "true");
+        localStorage.setItem("savedUsername", form.username);
+      } else {
+        localStorage.removeItem("rememberMe");
+        localStorage.removeItem("savedUsername");
       }
 
-      // Chuyển hướng sau khi đăng nhập thành công
-      setTimeout(() => {
-        navigate("/admin");
-      }, 1000);
+      // Chuyển hướng ngay sau khi đăng nhập thành công
+      navigate("/admin", { replace: true });
     } catch (err) {
+      console.error("LOGIN ERROR:", err);
+
       setError(
-        err.response?.data?.msg ||
+        err?.response?.data?.msg ||
+          err?.message ||
           "Đăng nhập thất bại. Vui lòng kiểm tra lại tên đăng nhập hoặc mật khẩu."
       );
     } finally {
@@ -118,7 +148,11 @@ function Login() {
 
           <button
             type="submit"
-            style={loading ? { ...styles.button, ...styles.buttonDisabled } : styles.button}
+            style={
+              loading
+                ? { ...styles.button, ...styles.buttonDisabled }
+                : styles.button
+            }
             disabled={loading}
           >
             {loading ? (
@@ -159,7 +193,6 @@ function Login() {
 }
 
 const styles = {
-  // Container chính
   container: {
     minHeight: "100vh",
     display: "flex",
@@ -171,7 +204,6 @@ const styles = {
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
   },
 
-  // Card đăng nhập
   card: {
     maxWidth: "440px",
     width: "100%",
@@ -182,7 +214,6 @@ const styles = {
     transition: "transform 0.2s ease, box-shadow 0.2s ease",
   },
 
-  // Header
   header: {
     textAlign: "center",
     marginBottom: "2rem",
@@ -202,14 +233,12 @@ const styles = {
     margin: 0,
   },
 
-  // Form
   form: {
     display: "flex",
     flexDirection: "column",
     gap: "1.25rem",
   },
 
-  // Nhóm input
   inputGroup: {
     position: "relative",
     width: "100%",
@@ -250,7 +279,6 @@ const styles = {
     alignItems: "center",
   },
 
-  // Checkbox
   checkboxLabel: {
     display: "flex",
     alignItems: "center",
@@ -268,7 +296,6 @@ const styles = {
     accentColor: "#667eea",
   },
 
-  // Button
   button: {
     background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
     color: "white",
@@ -295,7 +322,6 @@ const styles = {
     animation: "spin 1s linear infinite",
   },
 
-  // Error message
   errorMessage: {
     background: "#fed7d7",
     borderLeft: "4px solid #e53e3e",
@@ -306,7 +332,6 @@ const styles = {
     marginBottom: "0.25rem",
   },
 
-  // Footer
   footer: {
     display: "flex",
     justifyContent: "space-between",
@@ -323,7 +348,6 @@ const styles = {
   },
 };
 
-// Thêm hiệu ứng hover cho card và các element
 const cardHoverEffect = `
   .login-card:hover {
     transform: translateY(-2px);
@@ -350,7 +374,6 @@ const cardHoverEffect = `
   }
 `;
 
-// Thêm style vào document head
 if (typeof document !== "undefined") {
   const styleSheet = document.createElement("style");
   styleSheet.textContent = cardHoverEffect;
