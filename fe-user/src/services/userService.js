@@ -1,20 +1,20 @@
 import axiosClient from "./axiosClient";
 
-
+// Lấy danh sách user
 export const getUsers = async () => {
   try {
-    const res = await axiosClient.get("users/admin");
-    return res.data.users || [];
+    const res = await axiosClient.get("/api/users");
+    return res.data.users || res.data || [];
   } catch (err) {
     console.error("getUsers error:", err);
-    throw new Error("Không thể tải danh sách user");
+    throw new Error(err.response?.data?.msg || "Không thể tải danh sách user");
   }
 };
 
-
+// Tạo user
 export const createUser = async (userData) => {
   try {
-    const res = await axiosClient.post("auth/register", userData);
+    const res = await axiosClient.post("/api/auth/register", userData);
     return res.data;
   } catch (err) {
     console.error("createUser error:", err);
@@ -22,11 +22,10 @@ export const createUser = async (userData) => {
   }
 };
 
-
+// Cập nhật user
 export const updateUser = async (userId, userData) => {
   try {
-
-    const res = await axiosClient.put(`users/admin/${userId}`, userData);
+    const res = await axiosClient.put(`/api/users/${userId}`, userData);
     return res.data;
   } catch (err) {
     console.error("updateUser error:", err);
@@ -34,11 +33,10 @@ export const updateUser = async (userId, userData) => {
   }
 };
 
-
+// Xóa user
 export const deleteUser = async (userId) => {
   try {
-
-    const res = await axiosClient.delete(`api/users/${userId}`);
+    const res = await axiosClient.delete(`/api/users/${userId}`);
     return res.data;
   } catch (err) {
     console.error("deleteUser error:", err);
@@ -46,16 +44,17 @@ export const deleteUser = async (userId) => {
   }
 };
 
-
+// Bật/tắt trạng thái user
 export const toggleUserStatus = async (userId, currentStatus) => {
   try {
-
-    const res = await axiosClient.put(`auth/admin/users/${userId}/status`, {
-      isActive: !currentStatus
+    const res = await axiosClient.put(`/api/users/${userId}/status`, {
+      is_active: !currentStatus,
     });
     return res.data;
   } catch (err) {
     console.error("toggleUserStatus error:", err);
-    throw new Error(err.response?.data?.msg || "Không thể thay đổi trạng thái user");
+    throw new Error(
+      err.response?.data?.msg || "Không thể thay đổi trạng thái user"
+    );
   }
 };
