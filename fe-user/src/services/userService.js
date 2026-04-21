@@ -3,7 +3,7 @@ import axiosClient from "./axiosClient";
 // Lấy danh sách user
 export const getUsers = async () => {
   try {
-    const res = await axiosClient.get("/api/users");
+    const res = await axiosClient.get("/users");
     return res.data.users || res.data || [];
   } catch (err) {
     console.error("getUsers error:", err);
@@ -14,7 +14,7 @@ export const getUsers = async () => {
 // Tạo user
 export const createUser = async (userData) => {
   try {
-    const res = await axiosClient.post("/api/auth/register", userData);
+    const res = await axiosClient.post("/auth/register", userData);
     return res.data;
   } catch (err) {
     console.error("createUser error:", err);
@@ -25,7 +25,7 @@ export const createUser = async (userData) => {
 // Cập nhật user
 export const updateUser = async (userId, userData) => {
   try {
-    const res = await axiosClient.put(`/api/users/${userId}`, userData);
+    const res = await axiosClient.put(`/users/${userId}`, userData);
     return res.data;
   } catch (err) {
     console.error("updateUser error:", err);
@@ -36,7 +36,7 @@ export const updateUser = async (userId, userData) => {
 // Xóa user
 export const deleteUser = async (userId) => {
   try {
-    const res = await axiosClient.delete(`/api/users/${userId}`);
+    const res = await axiosClient.delete(`/users/${userId}`);
     return res.data;
   } catch (err) {
     console.error("deleteUser error:", err);
@@ -47,7 +47,7 @@ export const deleteUser = async (userId) => {
 // Bật/tắt trạng thái user
 export const toggleUserStatus = async (userId, currentStatus) => {
   try {
-    const res = await axiosClient.put(`/api/users/${userId}/status`, {
+    const res = await axiosClient.put(`/users/${userId}/status`, {
       is_active: !currentStatus,
     });
     return res.data;
