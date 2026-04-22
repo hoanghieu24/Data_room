@@ -51,20 +51,18 @@ import {
   Tabs,
   Tab,
   LinearProgress,
+  Badge,
   Zoom,
   Fade,
   Grow,
+  Slide,
   Stack,
-  Divider,
-  InputAdornment,
-  Stepper,
-  Step,
-  StepLabel,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  DeleteSweep as DeleteSweepIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
   Folder as FolderIcon,
@@ -72,6 +70,7 @@ import {
   TableChart as ExcelIcon,
   Description as DocIcon,
   Refresh as RefreshIcon,
+  Search as SearchIcon,
   FilterList as FilterIcon,
   CloudUpload as UploadIcon,
   CloudDownload as CloudDownloadIcon,
@@ -82,72 +81,27 @@ import {
   Image as ImageIcon,
   TextSnippet as TextIcon,
   History as HistoryIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
   Info as InfoIcon,
   Pause as PauseIcon,
   PlayArrow as PlayArrowIcon,
-  CloudDone as CloudDoneIcon,
-  Security as SecurityIcon,
-  CalendarToday as CalendarIcon,
-  Description as DescriptionIcon,
-  VpnKey as VpnKeyIcon,
-  Save as SaveIcon,
 } from "@mui/icons-material";
-import { styled } from "@mui/material/styles";
-
-// Styled components for better UI
-const StyledDialog = styled(Dialog)(({ theme }) => ({
-  "& .MuiDialog-paper": {
-    borderRadius: theme.spacing(2),
-    background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
-  },
-}));
-
-const StyledCard = styled(Card)(({ theme }) => ({
-  borderRadius: theme.spacing(2),
-  transition: "transform 0.2s, box-shadow 0.2s",
-  "&:hover": {
-    transform: "translateY(-4px)",
-    boxShadow: theme.shadows[8],
-  },
-}));
-
-const DropZone = styled(Box)(({ theme }) => ({
-  border: `2px dashed ${theme.palette.primary.main}`,
-  borderRadius: theme.spacing(2),
-  padding: theme.spacing(4),
-  textAlign: "center",
-  cursor: "pointer",
-  transition: "all 0.3s ease",
-  backgroundColor: theme.palette.action.hover,
-  "&:hover": {
-    backgroundColor: theme.palette.action.selected,
-    borderColor: theme.palette.primary.dark,
-  },
-}));
-
-const PreviewImage = styled("img")({
-  maxWidth: "100%",
-  maxHeight: "200px",
-  objectFit: "contain",
-  borderRadius: "8px",
-});
 
 function DocumentManagement() {
   const isDocumentActive = (value) => {
     return value === true || value === 1 || value === "1" || value === "true";
   };
-  
   const [passwordError, setPasswordError] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
-  
-  const showSnackbar = useCallback((message, severity = "success") => {
+const showSnackbar = useCallback((message, severity = "success") => {
     setSnackbar({
       open: true,
       message,
       severity,
     });
   }, []);
-  
   const [documents, setDocuments] = useState([]);
   const [statistics, setStatistics] = useState({
     total: 0,
@@ -166,7 +120,6 @@ function DocumentManagement() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [deleteReason, setDeleteReason] = useState("");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const [activeStep, setActiveStep] = useState(0);
 
   const [viewDialog, setViewDialog] = useState(false);
   const [viewingDocument, setViewingDocument] = useState(null);
@@ -176,12 +129,7 @@ function DocumentManagement() {
   const [logsDialog, setLogsDialog] = useState(false);
   const [logs, setLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  const [logStatistics, setLogStatistics] = useState({
-    total_logs: 0,
-    today_logs: 0,
-    week_logs: 0,
-    month_logs: 0
-  });
+  const [logStatistics, setLogStatistics] = useState(null);
   const [selectedLogDocument, setSelectedLogDocument] = useState(null);
   const [allLogs, setAllLogs] = useState([]);
   const [openAllLogsDialog, setOpenAllLogsDialog] = useState(false);
@@ -229,7 +177,6 @@ function DocumentManagement() {
   const [abortController, setAbortController] = useState(null);
 
   const [deletingId, setDeletingId] = useState(null);
-  const [filePreview, setFilePreview] = useState(null);
 
   const CHUNK_SIZE = 5 * 1024 * 1024;
   const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024;
@@ -277,6 +224,7 @@ function DocumentManagement() {
 
       await pendingPasswordAction(passwordInput);
 
+      // đúng mật mã -> đóng modal
       setPasswordDialog(false);
       setPasswordInput("");
       setPendingPasswordAction(null);
@@ -298,33 +246,21 @@ function DocumentManagement() {
       const res = await axiosClient.get("/users");
       setUsers(res.data.users || []);
     } catch (err) {
-      console.error("Lỗi lấy users (có thể API chưa có):", err);
-      // Set empty array, don't show error to user
-      setUsers([]);
+      console.error("Lỗi lấy users:", err);
     }
   }, []);
+
+  
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const docsData = await getDocuments();
-      setDocuments(docsData || []);
-      
-      // Try to get statistics, but don't fail if it's not available
-      try {
-        const statsData = await getDocumentStatistics();
-        setStatistics(statsData || {
-          total: 0,
-          pdfCount: 0,
-          excelCount: 0,
-          totalSize: 0,
-          totalDownloads: 0,
-        });
-      } catch (statsErr) {
-        console.error("Không thể tải thống kê:", statsErr);
-        // Keep default statistics
-      }
-      
+      const [docsData, statsData] = await Promise.all([
+        getDocuments(),
+        getDocumentStatistics(),
+      ]);
+      setDocuments(docsData);
+      setStatistics(statsData);
       setError("");
     } catch (err) {
       setError(err.message || "Không thể tải dữ liệu");
@@ -350,15 +286,9 @@ function DocumentManagement() {
   const fetchLogStatistics = useCallback(async () => {
     try {
       const stats = await getLogStatistics();
-      setLogStatistics(stats || {
-        total_logs: 0,
-        today_logs: 0,
-        week_logs: 0,
-        month_logs: 0
-      });
+      setLogStatistics(stats);
     } catch (err) {
       console.error("Lỗi khi lấy thống kê logs:", err);
-      // Keep default statistics, don't show error
     }
   }, []);
 
@@ -368,15 +298,14 @@ function DocumentManagement() {
       setAllLogs(result.logs || []);
     } catch (err) {
       console.error("Lỗi lấy all logs:", err);
-      showSnackbar("Không thể tải lịch sử logs", "error");
     }
-  }, [showSnackbar]);
+  }, []);
 
   useEffect(() => {
     fetchData();
     fetchFolders();
     fetchLogStatistics();
-    fetchUsers(); // This will fail silently if endpoint doesn't exist
+    fetchUsers();
   }, [fetchData, fetchFolders, fetchLogStatistics, fetchUsers]);
 
   const cancelUpload = useCallback(() => {
@@ -409,7 +338,6 @@ function DocumentManagement() {
         expiry_date: doc.expiry_date || "",
       });
       setSelectedFile(null);
-      setFilePreview(null);
     } else {
       setEditingDocument(null);
       setFormData({
@@ -423,7 +351,6 @@ function DocumentManagement() {
         expiry_date: "",
       });
       setSelectedFile(null);
-      setFilePreview(null);
     }
 
     setUploadProgress(0);
@@ -431,7 +358,6 @@ function DocumentManagement() {
     setUploadSpeed(0);
     setCurrentChunk(0);
     setTotalChunks(0);
-    setActiveStep(0);
     setOpenDialog(true);
   }, []);
 
@@ -442,13 +368,11 @@ function DocumentManagement() {
     setOpenDialog(false);
     setEditingDocument(null);
     setSelectedFile(null);
-    setFilePreview(null);
     setUploadProgress(0);
     setIsPaused(false);
     setUploadSpeed(0);
     setCurrentChunk(0);
     setTotalChunks(0);
-    setActiveStep(0);
     if (abortController) {
       abortController.abort();
       setAbortController(null);
@@ -592,17 +516,6 @@ function DocumentManagement() {
         }
 
         setSelectedFile(file);
-        
-        if (file.type.startsWith("image/")) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            setFilePreview(e.target.result);
-          };
-          reader.readAsDataURL(file);
-        } else {
-          setFilePreview(null);
-        }
-
         if (!formData.name) {
           setFormData((prev) => ({
             ...prev,
@@ -617,22 +530,6 @@ function DocumentManagement() {
     },
     [formData.name, showSnackbar],
   );
-
-  const handleDrop = useCallback(
-    (e) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (file) {
-        const fakeEvent = { target: { files: [file] } };
-        handleFileSelect(fakeEvent);
-      }
-    },
-    [handleFileSelect],
-  );
-
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-  }, []);
 
   const handleDownload = useCallback(
     async (id, name, password = "") => {
@@ -801,7 +698,6 @@ function DocumentManagement() {
         expiry_date: "",
       });
       setSelectedFile(null);
-      setFilePreview(null);
       fetchData();
       fetchLogStatistics();
     } catch (err) {
@@ -910,7 +806,7 @@ function DocumentManagement() {
   ]);
 
   const getFileIcon = useCallback((fileType) => {
-    switch (fileType?.toLowerCase()) {
+    switch (fileType) {
       case "pdf":
         return <PdfIcon color="error" />;
       case "xlsx":
@@ -1046,7 +942,7 @@ function DocumentManagement() {
       filtered = filtered.filter((doc) => doc.access_level === filterAccess);
     }
 
-    if (filterUser !== "all" && users.length > 0) {
+    if (filterUser !== "all") {
       filtered = filtered.filter(
         (doc) => doc.uploaded_by === parseInt(filterUser),
       );
@@ -1092,7 +988,6 @@ function DocumentManagement() {
     filterType,
     filterAccess,
     filterUser,
-    users,
     sortBy,
   ]);
 
@@ -1206,437 +1101,6 @@ function DocumentManagement() {
     [handleCloseViewDialog, handleDownload],
   );
 
-  const renderDocumentDialog = () => (
-    <StyledDialog
-      open={openDialog}
-      onClose={handleCloseDialog}
-      maxWidth="md"
-      fullWidth
-    >
-      <DialogTitle sx={{ pb: 1 }}>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box display="flex" alignItems="center" gap={1.5}>
-            <Avatar
-              sx={{
-                bgcolor: editingDocument ? "primary.main" : "success.main",
-                width: 40,
-                height: 40,
-              }}
-            >
-              {editingDocument ? <EditIcon /> : <AddIcon />}
-            </Avatar>
-            <Box>
-              <Typography variant="h5" fontWeight="bold">
-                {editingDocument ? "Chỉnh sửa tài liệu" : "Thêm tài liệu mới"}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {editingDocument
-                  ? "Cập nhật thông tin tài liệu"
-                  : "Điền thông tin và tải file lên"}
-              </Typography>
-            </Box>
-          </Box>
-          <IconButton onClick={handleCloseDialog} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-      </DialogTitle>
-
-      <Divider />
-
-      <DialogContent sx={{ pt: 3 }}>
-        {!editingDocument && (
-          <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-            <Step>
-              <StepLabel>Thông tin cơ bản</StepLabel>
-            </Step>
-            <Step>
-              <StepLabel>Tải file lên</StepLabel>
-            </Step>
-            <Step>
-              <StepLabel>Phân quyền & Bảo mật</StepLabel>
-            </Step>
-          </Stepper>
-        )}
-
-        {(uploading || updating) && (
-          <Box sx={{ mb: 3 }}>
-            <LinearProgress
-              variant={uploadProgress > 0 ? "determinate" : "indeterminate"}
-              value={uploadProgress}
-              sx={{ borderRadius: 2, height: 10 }}
-            />
-            {uploading && (
-              <Box sx={{ mt: 1.5 }}>
-                <Grid container spacing={1}>
-                  <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">
-                      📤 Tiến độ: {uploadProgress.toFixed(1)}%
-                    </Typography>
-                  </Grid>
-                  {uploadSpeed > 0 && (
-                    <Grid item xs={6}>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        align="right"
-                        display="block"
-                      >
-                        ⚡ Tốc độ: {uploadSpeed.toFixed(0)} KB/s
-                      </Typography>
-                    </Grid>
-                  )}
-                  {totalChunks > 0 && (
-                    <Grid item xs={12}>
-                      <Typography variant="caption" color="text.secondary">
-                        📦 Đã upload: {currentChunk}/{totalChunks} chunks
-                      </Typography>
-                    </Grid>
-                  )}
-                </Grid>
-
-                {selectedFile?.size > LARGE_FILE_THRESHOLD && (
-                  <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => setIsPaused(!isPaused)}
-                      startIcon={isPaused ? <PlayArrowIcon /> : <PauseIcon />}
-                    >
-                      {isPaused ? "Tiếp tục" : "Tạm dừng"}
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="error"
-                      onClick={cancelUpload}
-                      startIcon={<CancelIcon />}
-                    >
-                      Hủy upload
-                    </Button>
-                  </Stack>
-                )}
-              </Box>
-            )}
-          </Box>
-        )}
-
-        <Box>
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <Typography
-                variant="subtitle1"
-                fontWeight="bold"
-                sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}
-              >
-                <DescriptionIcon color="primary" fontSize="small" />
-                Thông tin cơ bản
-              </Typography>
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Tên tài liệu"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                disabled={uploading || updating}
-                required
-                placeholder="Nhập tên tài liệu"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <DescriptionIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Mô tả"
-                name="description"
-                multiline
-                rows={3}
-                value={formData.description}
-                onChange={handleInputChange}
-                disabled={uploading || updating}
-                placeholder="Mô tả chi tiết về tài liệu..."
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <InfoIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <FormControl fullWidth required>
-                <InputLabel>Thư mục</InputLabel>
-                <Select
-                  name="folder_id"
-                  value={formData.folder_id}
-                  label="Thư mục"
-                  onChange={handleInputChange}
-                  disabled={uploading || updating || loadingFolders}
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <FolderIcon color="action" />
-                    </InputAdornment>
-                  }
-                >
-                  {folders.map((folder) => (
-                    <MenuItem key={folder.id} value={folder.id}>
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <FolderIcon fontSize="small" color="primary" />
-                        <span>{folder.name}</span>
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-
-            {!editingDocument && (
-              <>
-                <Grid item xs={12}>
-                  <Typography
-                    variant="subtitle1"
-                    fontWeight="bold"
-                    sx={{ mb: 2, mt: 1, display: "flex", alignItems: "center", gap: 1 }}
-                  >
-                    <CloudUploadIcon color="success" fontSize="small" />
-                    Tải file lên
-                  </Typography>
-
-                  <DropZone
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onClick={() => document.getElementById("file-upload")?.click()}
-                  >
-                    <input
-                      type="file"
-                      id="file-upload"
-                      hidden
-                      onChange={handleFileSelect}
-                      accept=".pdf,.xlsx,.xls,.docx,.doc,.txt,.jpg,.jpeg,.png,.gif"
-                      disabled={uploading || updating}
-                    />
-                    
-                    {filePreview ? (
-                      <Box>
-                        <PreviewImage src={filePreview} alt="Preview" />
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          {selectedFile?.name}
-                        </Typography>
-                      </Box>
-                    ) : selectedFile ? (
-                      <Box>
-                        {getFileIcon(selectedFile.name.split(".").pop())}
-                        <Typography variant="body1" sx={{ mt: 1, fontWeight: "bold" }}>
-                          {selectedFile.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {formatFileSize(selectedFile.size)}
-                        </Typography>
-                        <Chip
-                          label="Đã chọn"
-                          color="success"
-                          size="small"
-                          sx={{ mt: 1 }}
-                        />
-                      </Box>
-                    ) : (
-                      <>
-                        <CloudUploadIcon sx={{ fontSize: 60, color: "primary.main", mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>
-                          Kéo thả file vào đây
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" gutterBottom>
-                          hoặc click để chọn file
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Hỗ trợ: PDF, Excel, Word, Ảnh, TXT (Tối đa 1GB)
-                        </Typography>
-                      </>
-                    )}
-                  </DropZone>
-                </Grid>
-              </>
-            )}
-
-            <Grid item xs={12}>
-              <Typography
-                variant="subtitle1"
-                fontWeight="bold"
-                sx={{ mb: 2, mt: 1, display: "flex", alignItems: "center", gap: 1 }}
-              >
-                <SecurityIcon color="warning" fontSize="small" />
-                Phân quyền & Bảo mật
-              </Typography>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Mức độ truy cập</InputLabel>
-                <Select
-                  name="access_level"
-                  value={formData.access_level}
-                  label="Mức độ truy cập"
-                  onChange={handleInputChange}
-                  disabled={uploading || updating}
-                >
-                  <MenuItem value="public">
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <span>🌍</span> Công khai - Ai cũng có thể truy cập
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="restricted">
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <span>⚠️</span> Hạn chế - Chỉ người có mật mã
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="private">
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <span>🔒</span> Riêng tư - Chỉ mình tôi
-                    </Box>
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    name="is_encrypted"
-                    checked={formData.is_encrypted}
-                    onChange={handleInputChange}
-                    disabled={uploading || updating}
-                    color="primary"
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography variant="body2">Mã hóa tài liệu</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Mã hóa file để bảo mật cao hơn
-                    </Typography>
-                  </Box>
-                }
-              />
-            </Grid>
-
-            {(formData.access_level === "private" ||
-              formData.access_level === "restricted") && (
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  type="password"
-                  label="Mật mã tài liệu"
-                  name="access_password"
-                  value={formData.access_password}
-                  onChange={handleInputChange}
-                  disabled={uploading || updating}
-                  placeholder="Nhập mật mã để bảo vệ tài liệu"
-                  helperText="Người dùng cần nhập mật mã này để xem hoặc tải tài liệu"
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <VpnKeyIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-              </Grid>
-            )}
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Ngày hết hạn"
-                name="expiry_date"
-                type="date"
-                value={formData.expiry_date}
-                onChange={handleInputChange}
-                disabled={uploading || updating}
-                InputLabelProps={{ shrink: true }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <CalendarIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-                helperText="Để trống nếu không có thời hạn"
-              />
-            </Grid>
-          </Grid>
-        </Box>
-      </DialogContent>
-
-      <DialogActions sx={{ p: 3, pt: 2 }}>
-        <Button
-          onClick={handleCloseDialog}
-          disabled={uploading || updating}
-          variant="outlined"
-          startIcon={<CancelIcon />}
-        >
-          Hủy bỏ
-        </Button>
-
-        {!editingDocument && activeStep < 2 && (
-          <Button
-            variant="contained"
-            onClick={() => setActiveStep(activeStep + 1)}
-            disabled={
-              (activeStep === 0 && (!formData.name.trim() || !formData.folder_id)) ||
-              (activeStep === 1 && !selectedFile)
-            }
-          >
-            Tiếp theo
-          </Button>
-        )}
-
-        {!editingDocument && activeStep === 2 && (
-          <Button
-            onClick={handleCreateDocument}
-            variant="contained"
-            color="success"
-            disabled={
-              uploading ||
-              updating ||
-              !formData.name.trim() ||
-              !formData.folder_id ||
-              !selectedFile
-            }
-            startIcon={uploading ? <CircularProgress size={20} /> : <CloudDoneIcon />}
-          >
-            {uploading
-              ? `Đang tải lên... ${uploadProgress.toFixed(0)}%`
-              : "Tạo tài liệu"}
-          </Button>
-        )}
-
-        {editingDocument && (
-          <Button
-            onClick={handleUpdateDocument}
-            variant="contained"
-            disabled={updating || !formData.name.trim() || !formData.folder_id}
-            startIcon={updating ? <CircularProgress size={20} /> : <SaveIcon />}
-          >
-            {updating ? "Đang cập nhật..." : "Cập nhật"}
-          </Button>
-        )}
-      </DialogActions>
-    </StyledDialog>
-  );
-
   if (loading) {
     return (
       <Box
@@ -1702,7 +1166,7 @@ function DocumentManagement() {
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={2.4}>
           <Zoom in={true}>
-            <StyledCard>
+            <Card>
               <CardContent>
                 <Box display="flex" alignItems="center" gap={2}>
                   <Avatar sx={{ bgcolor: "primary.main" }}>
@@ -1710,7 +1174,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics?.total || 0}
+                      {statistics.total || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Tổng tài liệu
@@ -1718,12 +1182,12 @@ function DocumentManagement() {
                   </Box>
                 </Box>
               </CardContent>
-            </StyledCard>
+            </Card>
           </Zoom>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
           <Zoom in={true}>
-            <StyledCard>
+            <Card>
               <CardContent>
                 <Box display="flex" alignItems="center" gap={2}>
                   <Avatar sx={{ bgcolor: "error.main" }}>
@@ -1731,7 +1195,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics?.pdfCount || 0}
+                      {statistics.pdfCount || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       PDF
@@ -1739,12 +1203,12 @@ function DocumentManagement() {
                   </Box>
                 </Box>
               </CardContent>
-            </StyledCard>
+            </Card>
           </Zoom>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
           <Zoom in={true}>
-            <StyledCard>
+            <Card>
               <CardContent>
                 <Box display="flex" alignItems="center" gap={2}>
                   <Avatar sx={{ bgcolor: "success.main" }}>
@@ -1752,7 +1216,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics?.excelCount || 0}
+                      {statistics.excelCount || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Excel
@@ -1760,12 +1224,12 @@ function DocumentManagement() {
                   </Box>
                 </Box>
               </CardContent>
-            </StyledCard>
+            </Card>
           </Zoom>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
           <Zoom in={true}>
-            <StyledCard>
+            <Card>
               <CardContent>
                 <Box display="flex" alignItems="center" gap={2}>
                   <Avatar sx={{ bgcolor: "warning.main" }}>
@@ -1773,7 +1237,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics?.totalDownloads || 0}
+                      {statistics.totalDownloads || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Lượt tải
@@ -1781,12 +1245,12 @@ function DocumentManagement() {
                   </Box>
                 </Box>
               </CardContent>
-            </StyledCard>
+            </Card>
           </Zoom>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
           <Zoom in={true}>
-            <StyledCard>
+            <Card>
               <CardContent>
                 <Box display="flex" alignItems="center" gap={2}>
                   <Avatar sx={{ bgcolor: "info.main" }}>
@@ -1802,7 +1266,7 @@ function DocumentManagement() {
                   </Box>
                 </Box>
               </CardContent>
-            </StyledCard>
+            </Card>
           </Zoom>
         </Grid>
       </Grid>
@@ -1833,7 +1297,7 @@ function DocumentManagement() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={6} md={1.5}>
               <FormControl fullWidth size="small">
                 <InputLabel>Loại file</InputLabel>
                 <Select
@@ -1849,7 +1313,7 @@ function DocumentManagement() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={6} md={1.5}>
               <FormControl fullWidth size="small">
                 <InputLabel>Phân quyền</InputLabel>
                 <Select
@@ -1864,26 +1328,24 @@ function DocumentManagement() {
                 </Select>
               </FormControl>
             </Grid>
-            {users.length > 0 && (
-              <Grid item xs={6} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Người upload</InputLabel>
-                  <Select
-                    value={filterUser}
-                    label="Người upload"
-                    onChange={(e) => setFilterUser(e.target.value)}
-                  >
-                    <MenuItem value="all">Tất cả</MenuItem>
-                    {users.map((user) => (
-                      <MenuItem key={user.id} value={user.id}>
-                        {user.username || user.email}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            )}
-            <Grid item xs={6} md={2}>
+            <Grid item xs={6} md={1.5}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Người upload</InputLabel>
+                <Select
+                  value={filterUser}
+                  label="Người upload"
+                  onChange={(e) => setFilterUser(e.target.value)}
+                >
+                  <MenuItem value="all">Tất cả</MenuItem>
+                  {users.map((user) => (
+                    <MenuItem key={user.id} value={user.id}>
+                      {user.username || user.email}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={6} md={1.5}>
               <FormControl fullWidth size="small">
                 <InputLabel>Sắp xếp</InputLabel>
                 <Select
@@ -1899,7 +1361,7 @@ function DocumentManagement() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} md={1}>
+            <Grid item xs={6} md={1.5}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -2184,7 +1646,245 @@ function DocumentManagement() {
         </Box>
       )}
 
-      {renderDocumentDialog()}
+      <Dialog
+        open={openDialog}
+        onClose={handleCloseDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            {editingDocument ? (
+              <EditIcon color="primary" />
+            ) : (
+              <AddIcon color="success" />
+            )}
+            <Typography variant="h6">
+              {editingDocument ? "Chỉnh sửa tài liệu" : "Thêm tài liệu mới"}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {(uploading || updating) && (
+            <Box sx={{ mb: 2 }}>
+              <LinearProgress
+                variant={uploadProgress > 0 ? "determinate" : "indeterminate"}
+                value={uploadProgress}
+                sx={{ borderRadius: 2, height: 8 }}
+              />
+              {uploading && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="caption" sx={{ display: "block" }}>
+                    📤 Đang tải lên: {uploadProgress.toFixed(1)}%
+                    {uploadSpeed > 0 && ` • ⚡ ${uploadSpeed.toFixed(0)} KB/s`}
+                  </Typography>
+                  {totalChunks > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                      📦 Chunk: {currentChunk}/{totalChunks}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+              {uploading && selectedFile?.size > LARGE_FILE_THRESHOLD && (
+                <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setIsPaused(!isPaused)}
+                    startIcon={isPaused ? <PlayArrowIcon /> : <PauseIcon />}
+                  >
+                    {isPaused ? "Tiếp tục" : "Tạm dừng"}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={cancelUpload}
+                    startIcon={<CancelIcon />}
+                  >
+                    Hủy
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          <Box sx={{ pt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="📝 Tên tài liệu *"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  disabled={uploading || updating}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="📄 Mô tả"
+                  name="description"
+                  multiline
+                  rows={3}
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  disabled={uploading || updating}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <FormControl fullWidth required>
+                  <InputLabel>📁 Thư mục *</InputLabel>
+                  <Select
+                    name="folder_id"
+                    value={formData.folder_id}
+                    label="📁 Thư mục *"
+                    onChange={handleInputChange}
+                    disabled={uploading || updating || loadingFolders}
+                  >
+                    {folders.map((folder) => (
+                      <MenuItem key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {!editingDocument && (
+                <Grid item xs={12}>
+                  <Box
+                    sx={{
+                      border: "2px dashed",
+                      borderColor: "primary.main",
+                      borderRadius: 2,
+                      p: 3,
+                      textAlign: "center",
+                      bgcolor: "action.hover",
+                    }}
+                  >
+                    <input
+                      type="file"
+                      id="file-upload"
+                      hidden
+                      onChange={handleFileSelect}
+                      accept=".pdf,.xlsx,.xls,.docx,.doc,.txt,.jpg,.jpeg,.png,.gif"
+                      disabled={uploading || updating}
+                    />
+                    <label htmlFor="file-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        startIcon={<UploadIcon />}
+                        disabled={uploading || updating}
+                      >
+                        📂 Chọn file để tải lên *
+                      </Button>
+                    </label>
+
+                    {selectedFile && (
+                      <Alert severity="success" sx={{ mt: 2 }}>
+                        {selectedFile.name} •{" "}
+                        {formatFileSize(selectedFile.size)}
+                      </Alert>
+                    )}
+                  </Box>
+                </Grid>
+              )}
+
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>🔐 Mức độ truy cập</InputLabel>
+                  <Select
+                    name="access_level"
+                    value={formData.access_level}
+                    label="🔐 Mức độ truy cập"
+                    onChange={handleInputChange}
+                    disabled={uploading || updating}
+                  >
+                    <MenuItem value="public">🌍 Công khai</MenuItem>
+                    <MenuItem value="restricted">⚠️ Hạn chế</MenuItem>
+                    <MenuItem value="private">🔒 Riêng tư</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {(formData.access_level === "private" ||
+                formData.access_level === "restricted") && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    type="password"
+                    label="🔑 Mật mã tài liệu"
+                    name="access_password"
+                    value={formData.access_password}
+                    onChange={handleInputChange}
+                    disabled={uploading || updating}
+                    placeholder="Để trống nếu không dùng mật mã"
+                    helperText="Người có quyền truy cập sẽ phải nhập mật mã này để mở hoặc tải file"
+                  />
+                </Grid>
+              )}
+
+              <Grid item xs={12} sm={6}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      name="is_encrypted"
+                      checked={formData.is_encrypted}
+                      onChange={handleInputChange}
+                      disabled={uploading || updating}
+                    />
+                  }
+                  label="🔒 Mã hóa tài liệu"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="📅 Ngày hết hạn"
+                  name="expiry_date"
+                  type="date"
+                  value={formData.expiry_date}
+                  onChange={handleInputChange}
+                  InputLabelProps={{ shrink: true }}
+                  disabled={uploading || updating}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} disabled={uploading || updating}>
+            Hủy
+          </Button>
+          <Button
+            onClick={
+              editingDocument ? handleUpdateDocument : handleCreateDocument
+            }
+            variant="contained"
+            disabled={
+              uploading ||
+              updating ||
+              !formData.name.trim() ||
+              !formData.folder_id ||
+              (!editingDocument && !selectedFile)
+            }
+          >
+            {uploading
+              ? `📤 Đang tải lên... ${uploadProgress.toFixed(0)}%`
+              : updating
+                ? "🔄 Đang cập nhật..."
+                : editingDocument
+                  ? "💾 Cập nhật"
+                  : "✨ Tạo mới"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={passwordDialog}
@@ -2199,6 +1899,7 @@ function DocumentManagement() {
         fullWidth
       >
         <DialogTitle>Nhập mật mã tài liệu</DialogTitle>
+
         <DialogContent>
           <TextField
             autoFocus
@@ -2221,6 +1922,7 @@ function DocumentManagement() {
             }}
           />
         </DialogContent>
+
         <DialogActions>
           <Button
             onClick={() => {
@@ -2234,6 +1936,7 @@ function DocumentManagement() {
           >
             Hủy
           </Button>
+
           <Button
             variant="contained"
             onClick={handleSubmitPassword}
@@ -2254,9 +1957,6 @@ function DocumentManagement() {
           Xác nhận xóa tài liệu
         </DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Bạn có chắc chắn muốn xóa tài liệu này? Hành động này không thể hoàn tác.
-          </Alert>
           <TextField
             fullWidth
             label="📝 Lý do xóa (tùy chọn)"
@@ -2293,9 +1993,7 @@ function DocumentManagement() {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>
-          Lịch sử tài liệu: {selectedLogDocument?.name}
-        </DialogTitle>
+        <DialogTitle>Lịch sử tài liệu: {selectedLogDocument?.name}</DialogTitle>
         <DialogContent>
           {loadingLogs ? (
             <Box display="flex" justifyContent="center" py={4}>
@@ -2474,4 +2172,4 @@ function DocumentManagement() {
   );
 }
 
-export default DocumentManagement;
+export default DocumentManagement; 
