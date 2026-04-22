@@ -234,7 +234,7 @@ function Users() {
         phone: formData.phone.trim(),
         code: formData.code,
         department_id: formData.department_id || null,
-        is_active: formData.is_active,
+        status: formData.is_active,
       };
 
       if (!editingUser) {
