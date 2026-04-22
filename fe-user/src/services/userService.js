@@ -3,7 +3,7 @@ import axiosClient from "./axiosClient";
 // Lấy danh sách user
 export const getUsers = async () => {
   try {
-    const res = await axiosClient.get("/users");
+    const res = await axiosClient.get("/users/admin");
     return res.data.users || res.data || [];
   } catch (err) {
     console.error("getUsers error:", err);
