@@ -25,7 +25,7 @@ export const createUser = async (userData) => {
 // Cập nhật user
 export const updateUser = async (userId, userData) => {
   try {
-    const res = await axiosClient.put(`/${userId}`, userData);
+    const res = await axiosClient.put(`/admin/${userId}`, userData);
     return res.data;
   } catch (err) {
     console.error("updateUser error:", err);
@@ -36,7 +36,7 @@ export const updateUser = async (userId, userData) => {
 // Xóa user
 export const deleteUser = async (userId) => {
   try {
-    const res = await axiosClient.delete(`/${userId}`);
+    const res = await axiosClient.delete(`/admin/${userId}`);
     return res.data;
   } catch (err) {
     console.error("deleteUser error:", err);
