@@ -25,7 +25,7 @@ export const createUser = async (userData) => {
 // Cập nhật user
 export const updateUser = async (userId, userData) => {
   try {
-    const res = await axiosClient.put(`/admin/${userId}`, userData);
+    const res = await axiosClient.put(`/users/admin/${userId}`, userData);
     return res.data;
   } catch (err) {
     console.error("updateUser error:", err);
