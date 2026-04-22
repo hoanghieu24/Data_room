@@ -51,24 +51,20 @@ import {
   Tabs,
   Tab,
   LinearProgress,
-  Badge,
   Zoom,
   Fade,
   Grow,
-  Slide,
   Stack,
   Divider,
   InputAdornment,
   Stepper,
   Step,
   StepLabel,
-  StepContent,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  DeleteSweep as DeleteSweepIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
   Folder as FolderIcon,
@@ -76,7 +72,6 @@ import {
   TableChart as ExcelIcon,
   Description as DocIcon,
   Refresh as RefreshIcon,
-  Search as SearchIcon,
   FilterList as FilterIcon,
   CloudUpload as UploadIcon,
   CloudDownload as CloudDownloadIcon,
@@ -87,9 +82,6 @@ import {
   Image as ImageIcon,
   TextSnippet as TextIcon,
   History as HistoryIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
   Info as InfoIcon,
   Pause as PauseIcon,
   PlayArrow as PlayArrowIcon,
@@ -97,9 +89,8 @@ import {
   Security as SecurityIcon,
   CalendarToday as CalendarIcon,
   Description as DescriptionIcon,
-  Person as PersonIcon,
-  Category as CategoryIcon,
   VpnKey as VpnKeyIcon,
+  Save as SaveIcon,
 } from "@mui/icons-material";
 import { styled } from "@mui/material/styles";
 
@@ -145,8 +136,10 @@ function DocumentManagement() {
   const isDocumentActive = (value) => {
     return value === true || value === 1 || value === "1" || value === "true";
   };
+  
   const [passwordError, setPasswordError] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  
   const showSnackbar = useCallback((message, severity = "success") => {
     setSnackbar({
       open: true,
@@ -154,6 +147,7 @@ function DocumentManagement() {
       severity,
     });
   }, []);
+  
   const [documents, setDocuments] = useState([]);
   const [statistics, setStatistics] = useState({
     total: 0,
@@ -182,7 +176,12 @@ function DocumentManagement() {
   const [logsDialog, setLogsDialog] = useState(false);
   const [logs, setLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  const [logStatistics, setLogStatistics] = useState(null);
+  const [logStatistics, setLogStatistics] = useState({
+    total_logs: 0,
+    today_logs: 0,
+    week_logs: 0,
+    month_logs: 0
+  });
   const [selectedLogDocument, setSelectedLogDocument] = useState(null);
   const [allLogs, setAllLogs] = useState([]);
   const [openAllLogsDialog, setOpenAllLogsDialog] = useState(false);
@@ -299,19 +298,33 @@ function DocumentManagement() {
       const res = await axiosClient.get("/users");
       setUsers(res.data.users || []);
     } catch (err) {
-      console.error("Lỗi lấy users:", err);
+      console.error("Lỗi lấy users (có thể API chưa có):", err);
+      // Set empty array, don't show error to user
+      setUsers([]);
     }
   }, []);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [docsData, statsData] = await Promise.all([
-        getDocuments(),
-        getDocumentStatistics(),
-      ]);
-      setDocuments(docsData);
-      setStatistics(statsData);
+      const docsData = await getDocuments();
+      setDocuments(docsData || []);
+      
+      // Try to get statistics, but don't fail if it's not available
+      try {
+        const statsData = await getDocumentStatistics();
+        setStatistics(statsData || {
+          total: 0,
+          pdfCount: 0,
+          excelCount: 0,
+          totalSize: 0,
+          totalDownloads: 0,
+        });
+      } catch (statsErr) {
+        console.error("Không thể tải thống kê:", statsErr);
+        // Keep default statistics
+      }
+      
       setError("");
     } catch (err) {
       setError(err.message || "Không thể tải dữ liệu");
@@ -337,9 +350,15 @@ function DocumentManagement() {
   const fetchLogStatistics = useCallback(async () => {
     try {
       const stats = await getLogStatistics();
-      setLogStatistics(stats);
+      setLogStatistics(stats || {
+        total_logs: 0,
+        today_logs: 0,
+        week_logs: 0,
+        month_logs: 0
+      });
     } catch (err) {
       console.error("Lỗi khi lấy thống kê logs:", err);
+      // Keep default statistics, don't show error
     }
   }, []);
 
@@ -349,14 +368,15 @@ function DocumentManagement() {
       setAllLogs(result.logs || []);
     } catch (err) {
       console.error("Lỗi lấy all logs:", err);
+      showSnackbar("Không thể tải lịch sử logs", "error");
     }
-  }, []);
+  }, [showSnackbar]);
 
   useEffect(() => {
     fetchData();
     fetchFolders();
     fetchLogStatistics();
-    fetchUsers();
+    fetchUsers(); // This will fail silently if endpoint doesn't exist
   }, [fetchData, fetchFolders, fetchLogStatistics, fetchUsers]);
 
   const cancelUpload = useCallback(() => {
@@ -573,7 +593,6 @@ function DocumentManagement() {
 
         setSelectedFile(file);
         
-        // Create preview for images
         if (file.type.startsWith("image/")) {
           const reader = new FileReader();
           reader.onload = (e) => {
@@ -604,7 +623,7 @@ function DocumentManagement() {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
       if (file) {
-        const fakeEvent = { target: { files: [file], value: file.name } };
+        const fakeEvent = { target: { files: [file] } };
         handleFileSelect(fakeEvent);
       }
     },
@@ -891,7 +910,7 @@ function DocumentManagement() {
   ]);
 
   const getFileIcon = useCallback((fileType) => {
-    switch (fileType) {
+    switch (fileType?.toLowerCase()) {
       case "pdf":
         return <PdfIcon color="error" />;
       case "xlsx":
@@ -1027,7 +1046,7 @@ function DocumentManagement() {
       filtered = filtered.filter((doc) => doc.access_level === filterAccess);
     }
 
-    if (filterUser !== "all") {
+    if (filterUser !== "all" && users.length > 0) {
       filtered = filtered.filter(
         (doc) => doc.uploaded_by === parseInt(filterUser),
       );
@@ -1073,6 +1092,7 @@ function DocumentManagement() {
     filterType,
     filterAccess,
     filterUser,
+    users,
     sortBy,
   ]);
 
@@ -1186,7 +1206,6 @@ function DocumentManagement() {
     [handleCloseViewDialog, handleDownload],
   );
 
-  // Render Add/Edit Dialog with improved UI
   const renderDocumentDialog = () => (
     <StyledDialog
       open={openDialog}
@@ -1226,7 +1245,6 @@ function DocumentManagement() {
       <Divider />
 
       <DialogContent sx={{ pt: 3 }}>
-        {/* Stepper for better UX */}
         {!editingDocument && (
           <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
             <Step>
@@ -1305,7 +1323,6 @@ function DocumentManagement() {
 
         <Box>
           <Grid container spacing={3}>
-            {/* Basic Information Section */}
             <Grid item xs={12}>
               <Typography
                 variant="subtitle1"
@@ -1385,7 +1402,6 @@ function DocumentManagement() {
               </FormControl>
             </Grid>
 
-            {/* File Upload Section - Only for new documents */}
             {!editingDocument && (
               <>
                 <Grid item xs={12}>
@@ -1401,7 +1417,7 @@ function DocumentManagement() {
                   <DropZone
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
-                    onClick={() => document.getElementById("file-upload").click()}
+                    onClick={() => document.getElementById("file-upload")?.click()}
                   >
                     <input
                       type="file"
@@ -1454,7 +1470,6 @@ function DocumentManagement() {
               </>
             )}
 
-            {/* Access Control Section */}
             <Grid item xs={12}>
               <Typography
                 variant="subtitle1"
@@ -1695,7 +1710,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics.total || 0}
+                      {statistics?.total || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Tổng tài liệu
@@ -1716,7 +1731,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics.pdfCount || 0}
+                      {statistics?.pdfCount || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       PDF
@@ -1737,7 +1752,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics.excelCount || 0}
+                      {statistics?.excelCount || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Excel
@@ -1758,7 +1773,7 @@ function DocumentManagement() {
                   </Avatar>
                   <Box>
                     <Typography variant="h4">
-                      {statistics.totalDownloads || 0}
+                      {statistics?.totalDownloads || 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Lượt tải
@@ -1818,7 +1833,7 @@ function DocumentManagement() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </Grid>
-            <Grid item xs={6} md={1.5}>
+            <Grid item xs={6} md={2}>
               <FormControl fullWidth size="small">
                 <InputLabel>Loại file</InputLabel>
                 <Select
@@ -1834,7 +1849,7 @@ function DocumentManagement() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} md={1.5}>
+            <Grid item xs={6} md={2}>
               <FormControl fullWidth size="small">
                 <InputLabel>Phân quyền</InputLabel>
                 <Select
@@ -1849,24 +1864,26 @@ function DocumentManagement() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} md={1.5}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Người upload</InputLabel>
-                <Select
-                  value={filterUser}
-                  label="Người upload"
-                  onChange={(e) => setFilterUser(e.target.value)}
-                >
-                  <MenuItem value="all">Tất cả</MenuItem>
-                  {users.map((user) => (
-                    <MenuItem key={user.id} value={user.id}>
-                      {user.username || user.email}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6} md={1.5}>
+            {users.length > 0 && (
+              <Grid item xs={6} md={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Người upload</InputLabel>
+                  <Select
+                    value={filterUser}
+                    label="Người upload"
+                    onChange={(e) => setFilterUser(e.target.value)}
+                  >
+                    <MenuItem value="all">Tất cả</MenuItem>
+                    {users.map((user) => (
+                      <MenuItem key={user.id} value={user.id}>
+                        {user.username || user.email}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
+            <Grid item xs={6} md={2}>
               <FormControl fullWidth size="small">
                 <InputLabel>Sắp xếp</InputLabel>
                 <Select
@@ -1882,7 +1899,7 @@ function DocumentManagement() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} md={1.5}>
+            <Grid item xs={6} md={1}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -2167,7 +2184,6 @@ function DocumentManagement() {
         </Box>
       )}
 
-      {/* Render the improved dialog */}
       {renderDocumentDialog()}
 
       <Dialog
@@ -2183,7 +2199,6 @@ function DocumentManagement() {
         fullWidth
       >
         <DialogTitle>Nhập mật mã tài liệu</DialogTitle>
-
         <DialogContent>
           <TextField
             autoFocus
@@ -2206,7 +2221,6 @@ function DocumentManagement() {
             }}
           />
         </DialogContent>
-
         <DialogActions>
           <Button
             onClick={() => {
@@ -2220,7 +2234,6 @@ function DocumentManagement() {
           >
             Hủy
           </Button>
-
           <Button
             variant="contained"
             onClick={handleSubmitPassword}
@@ -2241,6 +2254,9 @@ function DocumentManagement() {
           Xác nhận xóa tài liệu
         </DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Bạn có chắc chắn muốn xóa tài liệu này? Hành động này không thể hoàn tác.
+          </Alert>
           <TextField
             fullWidth
             label="📝 Lý do xóa (tùy chọn)"
@@ -2277,7 +2293,9 @@ function DocumentManagement() {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Lịch sử tài liệu: {selectedLogDocument?.name}</DialogTitle>
+        <DialogTitle>
+          Lịch sử tài liệu: {selectedLogDocument?.name}
+        </DialogTitle>
         <DialogContent>
           {loadingLogs ? (
             <Box display="flex" justifyContent="center" py={4}>
@@ -2455,8 +2473,5 @@ function DocumentManagement() {
     </Box>
   );
 }
-
-// Add missing SaveIcon import or create one
-const SaveIcon = () => <span>💾</span>;
 
 export default DocumentManagement;
